@@ -25,6 +25,32 @@ class Link:
     strength: float
 
 
+def build_simple_regression(n_inputs):
+    # add n_nodes points below the output node
+    points = []
+    points.append(Point(
+        x=50,
+        y=50,
+        parents=[],
+        children=[],
+        point_id=0,
+        error=random.normalvariate(0, 1)
+    ))
+
+    for i in range(n_inputs):
+        conx_str = random.normalvariate(0, 1)
+        points.append(Point(x=50 + (i - (n_inputs / 2)) * 10,
+                            y=20,
+                            parents=[],
+                            children=[Link(points[0], conx_str)],
+                            point_id=i+1,
+                            error=random.normalvariate(0, 1)))
+
+        points[0].parents.append(Link(points[i+1], conx_str))
+
+    return points
+
+
 def build_random_diagonal(n_nodes, scale, density):
     # add n_nodes points randomly
     points = []
@@ -99,19 +125,10 @@ def test_subset(outcome_data, selected_var, n_confounds=5):
     regr = LinearRegression().fit(X, dependent_var)
     return regr.coef_[0]
 
-def main():
-    n_nodes = 40
-    scale = 100
-    density = 0.25
-    n_trials = 200
-    n_samples = 40
-    selected_variable = n_nodes - 2
 
-    graph = build_random_diagonal(n_nodes, scale, density)
+def run_regressions(graph, n_trials, selected_variable, n_samples=40):
+    n_nodes = len(graph)
     outcomes = np.array([forward_pass(graph) for _ in range(n_trials)])
-
-    full_impact = test_subset(outcomes, selected_variable, n_confounds=n_nodes)
-    no_control = test_subset(outcomes, selected_variable, n_confounds=0)
 
     impacts = []
     for n_confounds in range(n_nodes - 1):
@@ -121,20 +138,50 @@ def main():
             n_confounds_results.append(coefficient)
         impacts.append((n_confounds, n_confounds_results))
 
-    full_impact = test_subset(outcomes, selected_variable, n_confounds=n_confounds)
+    full_impact = test_subset(outcomes, selected_variable, n_confounds=n_nodes)
+
+    return impacts, full_impact
 
 
-    def plot_results_by_n_confounds(results):
-        for r in results:
-            plt.plot(r[1], len(r[1]) * [r[0]])
-            plt.plot(np.mean(r[1]), r[0], markersize=3, marker='x', color='red')
-
-
-    plot_results_by_n_confounds(impacts)
-
-    print(impacts[0], no_control)
+def plot_results_by_n_confounds(results, full_impact):
+    for r in results:
+        plt.plot(r[1], len(r[1]) * [r[0]])
+        plt.plot(np.mean(r[1]), r[0], markersize=3, marker='x', color='red')
 
     plt.axvline(full_impact, color='green')
+    plt.show()
+
+
+def get_abs_errors(results):
+    errors = []
+    for r in results:
+        errors.append(np.mean(r[1]))
+    return errors
+
+
+def main():
+    n_nodes = 40
+    scale = 100
+    density = 0.25
+    n_trials = 200
+    n_samples = 40
+
+    selected_variable = n_nodes - 2
+
+    n_graphs = 50
+
+    abs_errors = []
+    for _ in range(n_graphs):
+        graph = build_random_diagonal(n_nodes, scale, density)
+
+        impacts, full_impact = run_regressions(graph, n_trials, selected_variable, n_samples=n_samples)
+
+        abs_errors.append([abs(np.mean(r[1] - full_impact)) for r in impacts])
+
+    abs_errors = np.array(abs_errors)
+    mean_average_errors = np.mean(abs_errors, axis=0)
+    print(mean_average_errors)
+    plt.plot(np.linspace(0, 1, num=len(mean_average_errors)), mean_average_errors)
     plt.show()
 
 
